@@ -135,9 +135,10 @@ def get_batch_cell_embeddings(
             if cell_embedding_mode == "cls":
                 embeddings = embeddings[:, 0, :] # get the <cls> position embedding
             elif cell_embedding_mode == "gene":
-                embeddings = embeddings[:, 1:, :] # get the gene embeddings
+                embeddings = embeddings # get all gene embeddings
             else:
                 raise ValueError(f"Unknown cell embedding mode: {cell_embedding_mode}")
+
             embeddings = embeddings.cpu().numpy()
             cell_embeddings[count : count + len(embeddings)] = embeddings
             count += len(embeddings)
