@@ -89,59 +89,61 @@ def get_batch_cell_embeddings(
                 output["batch_labels"] = self.batch_ids[idx]
             return output
 
-    if cell_embedding_mode == "cls":
-        dataset = Dataset(
-            count_matrix, gene_ids, batch_ids if use_batch_labels else None
-        )
-        collator = DataCollator(
-            do_padding=True,
-            pad_token_id=vocab[model_configs["pad_token"]],
-            pad_value=model_configs["pad_value"],
-            do_mlm=False,
-            do_binning=True,
-            max_length=max_length,
-            sampling=True,
-            keep_first_n_tokens=1,
-        )
-        data_loader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            sampler=SequentialSampler(dataset),
-            collate_fn=collator,
-            drop_last=False,
-            num_workers=min(len(os.sched_getaffinity(0)), batch_size),
-            pin_memory=True,
-        )
+    dataset = Dataset(
+        count_matrix, gene_ids, batch_ids if use_batch_labels else None
+    )
+    collator = DataCollator(
+        do_padding=True,
+        pad_token_id=vocab[model_configs["pad_token"]],
+        pad_value=model_configs["pad_value"],
+        do_mlm=False,
+        do_binning=True,
+        max_length=max_length,
+        sampling=True,
+        keep_first_n_tokens=1,
+    )
+    data_loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        sampler=SequentialSampler(dataset),
+        collate_fn=collator,
+        drop_last=False,
+        num_workers=min(len(os.sched_getaffinity(0)), batch_size),
+        pin_memory=True,
+    )
 
-        device = next(model.parameters()).device
-        cell_embeddings = np.zeros(
-            (len(dataset), model_configs["embsize"]), dtype=np.float32
-        )
-        with torch.no_grad(), torch.cuda.amp.autocast(enabled=True):
-            count = 0
-            for data_dict in tqdm(data_loader, desc="Embedding cells"):
-                input_gene_ids = data_dict["gene"].to(device)
-                src_key_padding_mask = input_gene_ids.eq(
-                    vocab[model_configs["pad_token"]]
-                )
-                embeddings = model._encode(
-                    input_gene_ids,
-                    data_dict["expr"].to(device),
-                    src_key_padding_mask=src_key_padding_mask,
-                    batch_labels=data_dict["batch_labels"].to(device)
-                    if use_batch_labels
-                    else None,
-                )
+    device = next(model.parameters()).device
+    cell_embeddings = np.zeros(
+        (len(dataset), model_configs["embsize"]), dtype=np.float32
+    )
+    with torch.no_grad(), torch.cuda.amp.autocast(enabled=True):
+        count = 0
+        for data_dict in tqdm(data_loader, desc="Embedding cells"):
+            input_gene_ids = data_dict["gene"].to(device)
+            src_key_padding_mask = input_gene_ids.eq(
+                vocab[model_configs["pad_token"]]
+            )
+            embeddings = model._encode(
+                input_gene_ids,
+                data_dict["expr"].to(device),
+                src_key_padding_mask=src_key_padding_mask,
+                batch_labels=data_dict["batch_labels"].to(device)
+                if use_batch_labels
+                else None,
+            )
 
-                embeddings = embeddings[:, 0, :]  # get the <cls> position embedding
-                embeddings = embeddings.cpu().numpy()
-                cell_embeddings[count : count + len(embeddings)] = embeddings
-                count += len(embeddings)
-        cell_embeddings = cell_embeddings / np.linalg.norm(
-            cell_embeddings, axis=1, keepdims=True
-        )
-    else:
-        raise ValueError(f"Unknown cell embedding mode: {cell_embedding_mode}")
+            if cell_embedding_mode == "cls":
+                embeddings = embeddings[:, 0, :] # get the <cls> position embedding
+            elif cell_embedding_mode == "gene":
+                embeddings = embeddings[:, 1:, :] # get the gene embeddings
+            else:
+                raise ValueError(f"Unknown cell embedding mode: {cell_embedding_mode}")
+            embeddings = embeddings.cpu().numpy()
+            cell_embeddings[count : count + len(embeddings)] = embeddings
+            count += len(embeddings)
+    cell_embeddings = cell_embeddings / np.linalg.norm(
+        cell_embeddings, axis=1, keepdims=True
+    )
     return cell_embeddings
 
 
