@@ -152,6 +152,7 @@ def embed_data(
     adata_or_file: Union[AnnData, PathLike],
     model_dir: PathLike,
     gene_col: str = "feature_name",
+    cell_embedding_mode: str = "cls",
     max_length=1200,
     batch_size=64,
     obs_to_save: Optional[list] = None,
@@ -265,7 +266,7 @@ def embed_data(
     # get cell embeddings
     cell_embeddings = get_batch_cell_embeddings(
         adata,
-        cell_embedding_mode="cls",
+        cell_embedding_mode=cell_embedding_mode,
         model=model,
         vocab=vocab,
         max_length=max_length,
@@ -275,9 +276,11 @@ def embed_data(
         use_batch_labels=False,
     )
 
-    if return_new_adata:
-        obs_df = adata.obs[obs_to_save] if obs_to_save is not None else None
-        return sc.AnnData(X=cell_embeddings, obs=obs_df, dtype="float32")
+    return cell_embeddings
 
-    adata.obsm["X_scGPT"] = cell_embeddings
-    return adata
+    # if return_new_adata:
+    #     obs_df = adata.obs[obs_to_save] if obs_to_save is not None else None
+    #     return sc.AnnData(X=cell_embeddings, obs=obs_df, dtype="float32")
+
+    # adata.obsm["X_scGPT"] = cell_embeddings
+    # return adata
